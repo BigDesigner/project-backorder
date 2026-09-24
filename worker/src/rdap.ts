@@ -16,7 +16,23 @@ function normalizeDomain(input: string): string {
   return clean;
 }
 
+function getRdapDomainUrl(base: string, domain: string): string {
+  const cleanBase = base.endsWith("/") ? base : base + "/";
+  if (cleanBase.endsWith("/domain/")) {
+    return cleanBase + domain;
+  }
+  return cleanBase + "domain/" + domain;
+}
+
 const RDAP_FALLBACK_PROVIDER = "https://rdap.org/domain/";
+
+// Google Registry official authoritative RDAP endpoint (RFC-compliant, zero rate-limit issues)
+const GOOGLE_REGISTRY_BASE = "https://pubapi.registry.google/rdap/";
+const GOOGLE_REGISTRY_TLDS = [
+  "dev", "app", "page", "zip", "dad", "mov", "foo", "nexus",
+  "channel", "how", "soy", "ing", "meme", "day", "phd", "prof",
+  "esq", "fly", "eat", "boo", "cal", "rsvp"
+];
 
 const TLD_SPECIFIC_PROVIDERS: Record<string, string> = {
   "com": "https://rdap.verisign.com/com/v1/domain/",
@@ -38,6 +54,10 @@ const TLD_SPECIFIC_PROVIDERS: Record<string, string> = {
   "ve": "https://rdap.nic.ve/rdap/",
   "tz": "https://whois.tznic.or.tz/rdap/"
 };
+
+for (const tld of GOOGLE_REGISTRY_TLDS) {
+  TLD_SPECIFIC_PROVIDERS[tld] = GOOGLE_REGISTRY_BASE;
+}
 
 // TLD'ler için resmi RDAP servisi yok; RDAP hiç denenmeden doğrudan WHOIS'e gidilir.
 const WHOIS_ONLY_TLDS = new Set(["tr"]);
@@ -112,7 +132,7 @@ async function getWhoisServerForTld(tld: string): Promise<string> {
   }
   try {
     const raw = await queryWhoisTcp("whois.iana.org", tld);
-    const match = raw.match(/whois:\s+([a-z0-9.-]+)/i);
+    const match = raw.match(/^whois:\s*([a-z0-9.-]+)/im);
     if (match && match[1]) {
       return match[1].trim();
     }
@@ -206,7 +226,7 @@ export async function checkDomain(env: Env, domainIn: string): Promise<RdapResul
     base = TLD_SPECIFIC_PROVIDERS[tld] || RDAP_FALLBACK_PROVIDER;
   }
 
-  const url = base.endsWith("/") ? base + domain : base + "/" + domain;
+  const url = getRdapDomainUrl(base, domain);
 
   // [SAFE-02] Smart Jitter: Add a random delay (100ms - 1500ms) to avoid pattern detection
   await new Promise(r => setTimeout(r, 100 + Math.random() * 1400));
@@ -222,13 +242,16 @@ export async function checkDomain(env: Env, domainIn: string): Promise<RdapResul
     const http = resp.status;
 
     if (http === 404) {
-      // rdap.org gibi bootstrap redirector'lar bilinmeyen/yanlış TLD'lerde de 404 döner;
-      // "available" demeden önce WHOIS ile mutabakat ara.
+      // Otoriter registry (Google Registry, Verisign, PIR, DENIC vb.) doğrudan 404 döndüyse domain kesinlikle boştadır.
+      if (base !== RDAP_FALLBACK_PROVIDER) {
+        return { ok: true, status: "available", http };
+      }
+
+      // rdap.org gibi genel bootstrap redirector'lar bilinmeyen TLD'lerde de 404 dönebileceğinden WHOIS ile mutabakat ara.
       const whoisResult = await checkDomainWhois(domain);
       if (whoisResult.ok) {
         return whoisResult;
       }
-      // WHOIS de başarısız olduysa RDAP 404'üne güven.
       return { ok: true, status: "available", http };
     }
     if (http === 429) {
