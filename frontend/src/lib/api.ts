@@ -46,7 +46,7 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
 export const api = {
   health: () => req<{ok:boolean;ts:string}>(`/api/health`),
   me: () => req<{ok:boolean;user:{id:number;email:string}}>(`/api/me`),
-  login: (email: string, password: string) => req<{ok:boolean}>(`/api/login`, { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string, otp?: string) => req<{ok:boolean;require2fa?:boolean;message?:string}>(`/api/login`, { method: "POST", body: JSON.stringify({ email, password, otp }) }),
   logout: () => req<{ok:boolean}>(`/api/logout`, { method: "POST", body: JSON.stringify({}) }),
   domains: () => req<{ok:boolean;domains:Domain[];now:number}>(`/api/domains`),
   addDomain: (domain: string, label?: string, intervalMin?: number) => req<{ok:boolean;domain:Domain}>(`/api/domains`, { method: "POST", body: JSON.stringify({ domain, label, intervalMin }) }),
@@ -57,6 +57,10 @@ export const api = {
   testNotify: () => req<{ok:boolean}>(`/api/test-notify`, { method: "POST", body: JSON.stringify({}) }),
   cleanEvents: () => req<{ok:boolean;removed:number}>(`/api/maintenance/clean-events`, { method: "POST", body: JSON.stringify({}) }),
   factoryReset: () => req<{ok:boolean}>(`/api/maintenance/reset`, { method: "POST", body: JSON.stringify({}) }),
+  twoFactorStatus: () => req<{ok:boolean;enabled:boolean}>(`/api/2fa/status`),
+  twoFactorSetup: () => req<{ok:boolean;secret:string;uri:string}>(`/api/2fa/setup`, { method: "POST" }),
+  twoFactorVerify: (otp: string) => req<{ok:boolean}>(`/api/2fa/verify`, { method: "POST", body: JSON.stringify({ otp }) }),
+  twoFactorDisable: (otp?: string) => req<{ok:boolean}>(`/api/2fa/disable`, { method: "POST", body: JSON.stringify({ otp }) }),
 };
 
 export function fmtTime(tsSec: number | null | undefined): string {

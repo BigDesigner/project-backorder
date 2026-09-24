@@ -82,9 +82,12 @@ function Shell() {
     return { total, enabled, available, rateLimited, errors };
   }, [domains]);
 
-  async function doLogin(email: string, pass: string) {
+  async function doLogin(email: string, pass: string, otp?: string) {
     try {
-      await api.login(email, pass);
+      const res = await api.login(email, pass, otp);
+      if (res.require2fa) {
+        return { require2fa: true };
+      }
       setAuthed(true);
       setUserEmail(email);
       toast.push("Session initialized. Telemetry active.");

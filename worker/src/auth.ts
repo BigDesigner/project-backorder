@@ -31,7 +31,7 @@ export async function requireAuth(env: Env, req: Request): Promise<AuthedUser | 
   return { id: row.id, email: row.email };
 }
 
-export async function login(env: Env, emailIn: string, password: string): Promise<{ token: string } | null> {
+export async function verifyCredentials(env: Env, emailIn: string, password: string): Promise<AuthedUser | null> {
   const email = emailIn.trim().toLowerCase();
   const user = await env.DB.prepare("SELECT id, email, salt_b64, hash_b64 FROM users WHERE email = ?")
     .bind(email).first<{id:number,email:string,salt_b64:string,hash_b64:string}>();
@@ -43,13 +43,22 @@ export async function login(env: Env, emailIn: string, password: string): Promis
   const got = await pbkdf2Hash(password, salt, appSecret);
   if (!timingSafeEqual(expected, got)) return null;
 
+  return { id: user.id, email: user.email };
+}
+
+export async function createSession(env: Env, userId: number): Promise<{ token: string }> {
   const token = randomToken();
   const now = nowSec();
   const exp = now + SESSION_TTL_SEC;
   await env.DB.prepare("INSERT INTO sessions(token, user_id, expires_at, created_at) VALUES(?,?,?,?)")
-    .bind(token, user.id, exp, now).run();
-
+    .bind(token, userId, exp, now).run();
   return { token };
+}
+
+export async function login(env: Env, emailIn: string, password: string): Promise<{ token: string } | null> {
+  const user = await verifyCredentials(env, emailIn, password);
+  if (!user) return null;
+  return createSession(env, user.id);
 }
 
 export async function logout(env: Env, token: string): Promise<void> {

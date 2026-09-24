@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
 import { ensureAdmin, addEvent, listDomains, listEvents, nowSec, getDomainById, getDomainByName } from "./db";
-import { requireAuth, login as doLogin, logout as doLogout, getSessionTokenFromRequest } from "./auth";
+import { requireAuth, verifyCredentials, createSession, logout as doLogout, getSessionTokenFromRequest } from "./auth";
+import { generateTotpSecret, generateTotpUri, verifyTotp } from "./crypto";
 import { runScheduler } from "./scheduler";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -58,7 +59,7 @@ app.get("/api/me", async (c) => {
 
 app.post("/api/login", async (c) => {
   await ensureAdmin(c.env);
-  const body = await c.req.json().catch(() => null) as { email?: string; password?: string } | null;
+  const body = await c.req.json().catch(() => null) as { email?: string; password?: string; otp?: string } | null;
   if (!body?.email || !body?.password) return c.json({ ok: false, error: "Missing email/password" }, 400);
 
   // SEC-08: Rate limit — max 5 failed attempts per minute per IP
@@ -71,19 +72,134 @@ app.post("/api/login", async (c) => {
     return c.json({ ok: false, error: "Too many attempts. Try again later." }, 429);
   }
 
-  const res = await doLogin(c.env, body.email, body.password);
-  if (!res) {
+  // 1. Verify primary credentials first
+  const user = await verifyCredentials(c.env, body.email, body.password);
+  if (!user) {
     await addEvent(c.env, null, "auth", `Failed login attempt for ${body.email} IP: ${ip}`);
     return c.json({ ok: false, error: "Invalid credentials" }, 401);
   }
 
+  // 2. Check if 2FA (TOTP) is enabled in settings
+  const totpEnabledSetting = await c.env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'totp_enabled'"
+  ).first<{ value: string }>();
+  const isTotpEnabled = totpEnabledSetting?.value === "true";
+
+  if (isTotpEnabled) {
+    // If user has not provided OTP yet, prompt them to enter it
+    if (!body.otp) {
+      return c.json({ ok: false, require2fa: true, message: "Two-factor authentication code required" }, 200);
+    }
+
+    const totpSecret = await c.env.DB.prepare(
+      "SELECT value FROM settings WHERE key = 'totp_secret'"
+    ).first<{ value: string }>();
+
+    if (!totpSecret?.value || !(await verifyTotp(body.otp, totpSecret.value))) {
+      await addEvent(c.env, null, "auth", `Failed 2FA code verification for ${body.email} IP: ${ip}`);
+      return c.json({ ok: false, error: "Invalid 2FA code", require2fa: true }, 401);
+    }
+  }
+
+  // 3. Issue session upon successful authentication
+  const session = await createSession(c.env, user.id);
   await addEvent(c.env, null, "auth", `Login success for ${body.email}`);
   c.header(
     "Set-Cookie",
-    `bo_session=${encodeURIComponent(res.token)}; Path=/; Max-Age=${60*60*24*7}; HttpOnly; SameSite=None; Secure`
+    `bo_session=${encodeURIComponent(session.token)}; Path=/; Max-Age=${60*60*24*7}; HttpOnly; SameSite=None; Secure`
   );
 
   // SEC-01: Do NOT return token in body — HttpOnly cookie is sufficient
+  return c.json({ ok: true });
+});
+
+// 2FA Management Endpoints
+app.get("/api/2fa/status", async (c) => {
+  const user = await requireAuth(c.env, c.req.raw);
+  if (!user) return c.json({ ok: false }, 401);
+
+  const setting = await c.env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'totp_enabled'"
+  ).first<{ value: string }>();
+
+  return c.json({ ok: true, enabled: setting?.value === "true" });
+});
+
+app.post("/api/2fa/setup", async (c) => {
+  const user = await requireAuth(c.env, c.req.raw);
+  if (!user) return c.json({ ok: false }, 401);
+
+  const secret = generateTotpSecret();
+  const uri = generateTotpUri(secret, user.email, "DomainPulse");
+
+  // Save as pending secret until verified
+  await c.env.DB.prepare(
+    "INSERT INTO settings(key, value, updated_at) VALUES('totp_pending_secret', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+  ).bind(secret, nowSec()).run();
+
+  return c.json({ ok: true, secret, uri });
+});
+
+app.post("/api/2fa/verify", async (c) => {
+  const user = await requireAuth(c.env, c.req.raw);
+  if (!user) return c.json({ ok: false }, 401);
+
+  const body = await c.req.json().catch(() => null) as { otp?: string } | null;
+  if (!body?.otp) return c.json({ ok: false, error: "Missing OTP" }, 400);
+
+  const pending = await c.env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'totp_pending_secret'"
+  ).first<{ value: string }>();
+
+  if (!pending?.value) {
+    return c.json({ ok: false, error: "No pending 2FA setup found. Please initiate setup again." }, 400);
+  }
+
+  const valid = await verifyTotp(body.otp, pending.value);
+  if (!valid) {
+    return c.json({ ok: false, error: "Invalid 6-digit verification code. Please check your authenticator clock." }, 400);
+  }
+
+  // Promote pending secret to active totp_secret and set totp_enabled = true
+  await c.env.DB.prepare(
+    "INSERT INTO settings(key, value, updated_at) VALUES('totp_secret', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+  ).bind(pending.value, nowSec()).run();
+
+  await c.env.DB.prepare(
+    "INSERT INTO settings(key, value, updated_at) VALUES('totp_enabled', 'true', ?) ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = excluded.updated_at"
+  ).bind(nowSec()).run();
+
+  await c.env.DB.prepare("DELETE FROM settings WHERE key = 'totp_pending_secret'").run();
+
+  await addEvent(c.env, null, "auth", `Two-factor authentication (TOTP) enabled for ${user.email}`);
+
+  return c.json({ ok: true });
+});
+
+app.post("/api/2fa/disable", async (c) => {
+  const user = await requireAuth(c.env, c.req.raw);
+  if (!user) return c.json({ ok: false }, 401);
+
+  const body = await c.req.json().catch(() => null) as { otp?: string } | null;
+  const totpSecret = await c.env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'totp_secret'"
+  ).first<{ value: string }>();
+
+  // Require OTP verification to disable 2FA
+  if (totpSecret?.value && body?.otp) {
+    const valid = await verifyTotp(body.otp, totpSecret.value);
+    if (!valid) {
+      return c.json({ ok: false, error: "Invalid 6-digit code. Cannot disable 2FA." }, 400);
+    }
+  }
+
+  await c.env.DB.prepare(
+    "INSERT INTO settings(key, value, updated_at) VALUES('totp_enabled', 'false', ?) ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = excluded.updated_at"
+  ).bind(nowSec()).run();
+  await c.env.DB.prepare("DELETE FROM settings WHERE key IN ('totp_secret', 'totp_pending_secret')").run();
+
+  await addEvent(c.env, null, "auth", `Two-factor authentication (TOTP) disabled for ${user.email}`);
+
   return c.json({ ok: true });
 });
 
