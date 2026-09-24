@@ -1,75 +1,58 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, Domain, Event, fmtTime, relEta } from "./lib/api";
-import { classNames, statusPill, eventPill } from "./lib/ui";
-import { Modal } from "./components/Modal";
+import { api, Domain, Event } from "./lib/api";
 import { ToastProvider, useToast } from "./components/Toast";
-
-function GlobalFooter() {
-  return (
-    <footer className="py-10 text-center text-xs text-zinc-500 flex flex-col items-center gap-3 mt-auto">
-      <div>Backorder • built for always-free operations</div>
-      <a
-        href="https://github.com/BigDesigner/Backorder-Always-Free-Domain-Monitor"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="GitHub Repository"
-        className="opacity-80 hover:opacity-100 transition"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          className="w-6 h-6 fill-white"
-        >
-          <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.1 3.29 9.42 7.86 10.96.58.1.79-.25.79-.56v-2.02c-3.2.7-3.88-1.54-3.88-1.54-.53-1.35-1.29-1.71-1.29-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.75.41-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.77.11 3.06.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.27 5.69.42.36.79 1.07.79 2.16v3.2c0 .31.21.66.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/>
-        </svg>
-      </a>
-    </footer>
-  );
-}
+import { Header } from "./components/layout/Header";
+import { Footer } from "./components/layout/Footer";
+import { LoginView } from "./components/auth/LoginView";
+import { StatCards } from "./components/dashboard/StatCards";
+import { DomainTable } from "./components/dashboard/DomainTable";
+import { AddDomainModal } from "./components/domains/AddDomainModal";
+import { DeleteDomainModal } from "./components/domains/DeleteDomainModal";
+import { ActivityView } from "./components/activity/ActivityView";
+import { SettingsView } from "./components/settings/SettingsView";
 
 function Shell() {
   const toast = useToast();
 
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [userEmail, setUserEmail] = useState<string>("");
 
   const [domains, setDomains] = useState<Domain[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
-  const [now, setNow] = useState<number>(Math.floor(Date.now()/1000));
-
-  const [addOpen, setAddOpen] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
-  const [resetInput, setResetInput] = useState("");
-  const [newDomain, setNewDomain] = useState("");
-  const [newLabel, setNewLabel] = useState("");
-  const [newInterval, setNewInterval] = useState(60);
+  const [now, setNow] = useState<number>(Math.floor(Date.now() / 1000));
 
   const [tab, setTab] = useState<"dashboard" | "activity" | "settings">("dashboard");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "available" | "registered">("all");
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [deleteModalDomain, setDeleteModalDomain] = useState<Domain | null>(null);
 
   async function refreshAll() {
     try {
       const d = await api.domains();
       setDomains(d.domains || []);
-      setNow(d.now || Math.floor(Date.now()/1000));
+      setNow(d.now || Math.floor(Date.now() / 1000));
+
       const e = await api.events(250);
       setEvents(e.events || []);
-    } catch (err) {
-      if ((err as any)?.status === 401) {
+    } catch (err: any) {
+      if (err?.status === 401) {
         setAuthed(false);
       } else {
-        console.error("Refresh failed", err);
+        console.error("Refresh failed:", err);
       }
     }
   }
 
+  // Initial authentication check
   useEffect(() => {
     (async () => {
       try {
         await api.health();
-        await api.me();
+        const me = await api.me();
+        setUserEmail(me.user?.email || "admin@pulse.dev");
         setAuthed(true);
         await refreshAll();
       } catch {
@@ -80,30 +63,35 @@ function Shell() {
     })();
   }, []);
 
+  // Polling every 30s when authed
   useEffect(() => {
     if (!authed) return;
-    const t = setInterval(() => refreshAll().catch(() => {}), 30_000);
-    return () => clearInterval(t);
+    const intervalId = setInterval(() => {
+      refreshAll().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(intervalId);
   }, [authed]);
 
   const stats = useMemo(() => {
     const safeDomains = domains || [];
     const total = safeDomains.length;
-    const enabled = safeDomains.filter(d => d.enabled === 1).length;
-    const available = safeDomains.filter(d => (d.last_status || "").toLowerCase() === "available").length;
-    const rateLimited = safeDomains.filter(d => (d.last_status || "") === "rate_limited").length;
-    const errors = safeDomains.filter(d => (d.last_status || "") === "error").length;
+    const enabled = safeDomains.filter((d) => d.enabled === 1).length;
+    const available = safeDomains.filter((d) => (d.last_status || "").toLowerCase() === "available").length;
+    const rateLimited = safeDomains.filter((d) => (d.last_status || "").toLowerCase() === "rate_limited").length;
+    const errors = safeDomains.filter((d) => (d.last_status || "").toLowerCase() === "error").length;
     return { total, enabled, available, rateLimited, errors };
   }, [domains]);
 
-  async function doLogin() {
+  async function doLogin(email: string, pass: string) {
     try {
-      await api.login(email, password);
+      await api.login(email, pass);
       setAuthed(true);
-      toast.push("Signed in.");
+      setUserEmail(email);
+      toast.push("Session initialized. Telemetry active.");
       await refreshAll();
     } catch (e: any) {
-      toast.push(e?.message || "Login failed");
+      toast.push(e?.message || "Authentication failed");
+      throw e;
     }
   }
 
@@ -112,578 +100,138 @@ function Shell() {
     setAuthed(false);
     setDomains([]);
     setEvents([]);
-    toast.push("Signed out.");
+    toast.push("Session terminated.");
   }
 
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkInput, setBulkInput] = useState("");
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newDomain) return;
-    try {
-      await api.addDomain(newDomain, newLabel || undefined, newInterval || undefined);
-      setNewDomain("");
-      setNewLabel("");
-      toast.push(`Added ${newDomain}`);
-      await refreshAll();
-    } catch (e: any) {
-      toast.push(e.message);
-    }
-  }
-
-  async function handleBulkAdd(e: React.FormEvent) {
-    e.preventDefault();
-    const domains = bulkInput.split(/[\n,]+/).map(d => d.trim()).filter(d => d && d.includes("."));
-    if (domains.length === 0) {
-      toast.push("No valid domains found in input");
-      return;
-    }
-    
-    try {
-      toast.push(`Importing ${domains.length} domains...`);
-      const res = await api.bulkAddDomains(domains, newInterval || undefined);
-      setBulkInput("");
-      setBulkMode(false);
-      toast.push(`Done: ${res.results.added} added, ${res.results.skipped} skipped.`);
-      await refreshAll();
-    } catch (e: any) {
-      toast.push(e.message);
-    }
-  }
-
-  async function toggleDomain(d: Domain) {
-    await api.patchDomain(d.id, { enabled: d.enabled !== 1 }).catch((e:any) => toast.push(e?.message || "Failed"));
+  async function handleAddDomain(domain: string, label?: string, intervalMin?: number) {
+    await api.addDomain(domain, label, intervalMin);
+    toast.push(`Target "${domain}" registered.`);
     await refreshAll();
   }
 
-  async function forceCheck(d: Domain) {
-    await api.patchDomain(d.id, { forceCheck: true }).catch((e:any) => toast.push(e?.message || "Failed"));
-    toast.push("Forced check queued.");
+  async function handleBulkAddDomains(domainList: string[], intervalMin?: number) {
+    toast.push(`Ingesting ${domainList.length} targets...`);
+    const res = await api.bulkAddDomains(domainList, intervalMin);
+    toast.push(`Ingestion complete: ${res.results.added} added, ${res.results.skipped} skipped.`);
     await refreshAll();
   }
 
-  async function removeDomain(d: Domain) {
-    if (!confirm(`Are you sure you want to remove ${d.domain}?`)) return;
-    
+  async function handleToggleDomain(d: Domain) {
     try {
-      toast.push(`Attempting to delete ID: ${d.id}...`);
+      const nextState = d.enabled !== 1;
+      await api.patchDomain(d.id, { enabled: nextState });
+      toast.push(nextState ? `Resumed sweep for ${d.domain}` : `Paused sweep for ${d.domain}`);
+      await refreshAll();
+    } catch (e: any) {
+      toast.push(e?.message || "Failed to toggle target.");
+    }
+  }
+
+  async function handleForceCheck(d: Domain) {
+    try {
+      await api.patchDomain(d.id, { forceCheck: true });
+      toast.push(`Immediate sweep queued for ${d.domain}`);
+      await refreshAll();
+    } catch (e: any) {
+      toast.push(e?.message || "Failed to queue sweep.");
+    }
+  }
+
+  async function handleDeleteDomain(d: Domain) {
+    try {
       await api.deleteDomain(d.id);
-      
-      // Wait a bit longer for sync
-      await new Promise(r => setTimeout(r, 800));
-      
-      toast.push("Successfully removed.");
+      toast.push(`De-registered ${d.domain}`);
       await refreshAll();
     } catch (e: any) {
-      console.error("Delete failed:", e);
-      toast.push(`Error: ${e.message || "Deletion failed"}`);
+      toast.push(`Error: ${e.message || "Failed to remove target"}`);
+      throw e;
     }
-  }
-
-  async function setIntervalMin(d: Domain, minutes: number) {
-    await api.patchDomain(d.id, { intervalMin: minutes }).catch((e:any) => toast.push(e?.message || "Failed"));
-    await refreshAll();
-  }
-
-  function TopBar() {
-    return (
-      <div className="sticky top-0 z-30 border-b border-white/10 bg-black/40 backdrop-blur-xl">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-white/10 border border-white/10 grid place-items-center shadow-soft2">
-              <span className="text-lg font-bold">BO</span>
-            </div>
-            <div>
-              <div className="font-semibold leading-tight">Backorder</div>
-              <div className="text-xs text-zinc-400">Always‑free domain monitor</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {authed && (
-              <>
-                <button className={classNames("btn", tab==="dashboard" && "bg-white/20")} onClick={() => setTab("dashboard")}>Dashboard</button>
-                <button className={classNames("btn", tab==="activity" && "bg-white/20")} onClick={() => setTab("activity")}>Activity</button>
-                <button className={classNames("btn", tab==="settings" && "bg-white/20")} onClick={() => setTab("settings")}>Settings</button>
-                <button className="btn" onClick={() => setAddOpen(true)}>+ Add</button>
-                <button className="btn" onClick={doLogout}>Logout</button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-zinc-950">
-        <div className="card p-6 text-center">
-          <div className="text-xl font-semibold">Loading…</div>
-          <div className="text-sm text-zinc-400 mt-1">Warming up the Worker API</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col">
-        <TopBar />
-        <main className="flex-1 grid place-items-center px-4 py-20">
-          <div className="card p-8 w-full max-w-md glow bg-grid">
-            <h2 className="text-2xl font-bold mb-6 text-center">Sign-in</h2>
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
-                <input className="input" placeholder="admin@gnn.tr" value={email} onChange={(e)=>setEmail(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Password</label>
-                <input className="input" type="password" placeholder="••••••••" value={password} onChange={(e)=>setPassword(e.target.value)} />
-              </div>
-              <button className="btn w-full bg-white text-black hover:bg-zinc-200 border-none py-3 font-bold mt-2" onClick={doLogin}>
-                Sign In
-              </button>
-            </div>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3 p-8 rounded-xl bg-surface-container border border-outline-variant/60 shadow-2xl">
+          <div className="relative flex h-8 w-8">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-container opacity-75" />
+            <span className="relative inline-flex rounded-full h-8 w-8 bg-primary-container items-center justify-center">
+              <span className="material-symbols-outlined text-on-primary-fixed text-[18px]">radar</span>
+            </span>
           </div>
-        </main>
-        <GlobalFooter />
+          <div className="text-sm font-semibold text-on-surface">Initializing DomainPulse Radar</div>
+          <div className="text-xs text-on-surface-variant font-label-code">Connecting to Edge Worker API...</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
-      <TopBar />
-      
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+    <div className="min-h-screen bg-background flex flex-col selection:bg-primary-container selection:text-on-primary-fixed">
+      {/* Top Header */}
+      <Header
+        tab={tab}
+        setTab={setTab}
+        onAddClick={() => setAddModalOpen(true)}
+        onLogout={doLogout}
+        authed={authed}
+        userEmail={userEmail}
+      />
 
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {tab === "dashboard" && (
-          <>
-            <div className="grid md:grid-cols-5 gap-4">
-              <div className="card p-4">
-                <div className="text-zinc-400 text-xs">Total</div>
-                <div className="text-2xl font-semibold mt-1">{stats.total}</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-zinc-400 text-xs">Enabled</div>
-                <div className="text-2xl font-semibold mt-1">{stats.enabled}</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-zinc-400 text-xs">Available</div>
-                <div className="text-2xl font-semibold mt-1">{stats.available}</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-zinc-400 text-xs">Rate‑limited</div>
-                <div className="text-2xl font-semibold mt-1">{stats.rateLimited}</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-zinc-400 text-xs">Errors</div>
-                <div className="text-2xl font-semibold mt-1">{stats.errors}</div>
-              </div>
-            </div>
+      {/* Main Container */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 lg:px-8 pt-24 pb-12 flex flex-col">
+        {!authed ? (
+          <LoginView onLogin={doLogin} loading={loading} />
+        ) : (
+          <div className="flex flex-col gap-8 w-full">
+            {tab === "dashboard" && (
+              <>
+                {/* Metric Summary Cards */}
+                <StatCards
+                  stats={stats}
+                  activeFilter={filterStatus}
+                  onFilterChange={(f) => setFilterStatus(f)}
+                />
 
-            <div className="mt-6 card overflow-hidden">
-              <div className="p-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-lg font-semibold">Domains</div>
-                  <div className="text-xs text-zinc-400">Auto‑refresh every 30s</div>
-                </div>
-                <div className="text-xs text-zinc-500">Now: {new Date(now*1000).toLocaleString()}</div>
-              </div>
-              <div className="sep" />
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-zinc-400">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">Domain</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Next</th>
-                      <th className="px-4 py-3">Interval</th>
-                      <th className="px-4 py-3 text-emerald-400">Expires</th>
-                      <th className="px-4 py-3">Last Check</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {domains.map(d => (
-                      <tr key={d.id} className="border-t border-white/10 hover:bg-white/5">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold">{d.domain}</div>
-                          <div className="text-xs text-zinc-500">{d.label || "—"}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className={classNames(statusPill(d.last_status))}>
-                            <span className="text-[10px]">●</span>
-                            {(d.last_status || "unknown").replace("_"," ")}
-                          </div>
-                          {d.last_rdap_http ? <div className="text-xs text-zinc-500 mt-1 pl-4">HTTP {d.last_rdap_http}</div> : null}
-                          {d.last_error ? <div className="text-xs text-rose-200/80 mt-1 max-w-xs truncate" title={d.last_error}>{d.last_error}</div> : null}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{relEta(d.next_check_at, now)}</div>
-                          <div className="text-xs text-zinc-500">{fmtTime(d.next_check_at)}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            className="input bg-black/30 w-full mb-1"
-                            value={d.check_interval_min}
-                            onChange={(e)=>setIntervalMin(d, parseInt(e.target.value,10))}
-                          >
-                            {[30,60,120,240,360,720,1440].map(m => (
-                              <option key={m} value={m}>{m} min</option>
-                            ))}
-                          </select>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            {d.check_interval_min === 30 && (
-                              <span className="text-amber-400 flex items-center gap-1 select-none">
-                                <span>●</span> High Load
-                              </span>
-                            )}
-                            {d.check_interval_min >= 60 && d.check_interval_min <= 360 && (
-                              <span className="text-emerald-400 flex items-center gap-1 select-none">
-                                <span>●</span> Optimal
-                              </span>
-                            )}
-                            {d.check_interval_min > 360 && (
-                              <span className="text-sky-400 flex items-center gap-1 select-none">
-                                <span>●</span> Eco
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {d.expires_at ? (
-                            <div className={classNames(
-                              "font-medium",
-                              (d.expires_at - now < 86400 * 30) ? "text-rose-400" : "text-emerald-400"
-                            )}>
-                              {fmtTime(d.expires_at).split(",")[0]}
-                              <div className="text-[10px] opacity-70">
-                                {Math.ceil((d.expires_at - now) / 86400)} days left
-                              </div>
-                            </div>
-                          ) : "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="text-zinc-200">{fmtTime(d.last_checked_at)}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button className="btn" onClick={() => toggleDomain(d)}>
-                              {d.enabled === 1 ? "Disable" : "Enable"}
-                            </button>
-                            <button className="btn" onClick={() => forceCheck(d)}>Force</button>
-                            <button className="btn" onClick={() => removeDomain(d)}>Delete</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {domains.length === 0 && (
-                      <tr>
-                        <td className="px-4 py-8 text-zinc-400" colSpan={7}>
-                          No domains yet. Click <span className="font-semibold text-zinc-200">+ Add</span> to start monitoring.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                {/* Domain Watchlist Table */}
+                <DomainTable
+                  domains={domains}
+                  now={now}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  filterStatus={filterStatus}
+                  onFilterChange={setFilterStatus}
+                  onToggle={handleToggleDomain}
+                  onForceCheck={handleForceCheck}
+                  onDelete={(d) => setDeleteModalDomain(d)}
+                  onAddClick={() => setAddModalOpen(true)}
+                />
+              </>
+            )}
 
-            {/* Removed Latest Activity and moved Ops Notes to About tab */}
-          </>
-        )}
+            {tab === "activity" && <ActivityView events={events} />}
 
-        {tab === "activity" && (
-          <div className="card p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold">Activity timeline</div>
-                <div className="text-xs text-zinc-400">Audit log for checks, status changes, auth events</div>
-              </div>
-              <button className="btn" onClick={() => {
-                const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "events.json";
-                a.click();
-                URL.revokeObjectURL(url);
-              }}>Export JSON</button>
-            </div>
-            <div className="sep my-4" />
-            <div className="max-h-[70vh] overflow-auto pr-1">
-              {/* Header */}
-              <div className="grid grid-cols-[110px_1fr_150px] gap-4 px-2 py-2 text-[10px] uppercase tracking-wider font-bold text-zinc-500 border-b border-zinc-800/50 mb-2">
-                <div>Type</div>
-                <div>Message</div>
-                <div className="text-right">Timestamp</div>
-              </div>
-              
-              <div className="space-y-1">
-                {events.map(ev => (
-                  <div key={ev.id} className="grid grid-cols-[110px_1fr_150px] gap-4 items-center px-2 py-2 hover:bg-zinc-800/30 rounded-lg transition-colors group">
-                    <div className={classNames(eventPill(ev.type), "w-full justify-start font-mono text-[10px] uppercase")}>
-                      <span className="text-[8px]">●</span>
-                      {ev.type}
-                    </div>
-                    <div className="text-sm text-zinc-300 truncate group-hover:text-zinc-100" title={ev.message}>
-                      {ev.message}
-                    </div>
-                    <div className="text-xs text-zinc-500 font-mono text-right">
-                      {fmtTime(ev.created_at)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {events.length === 0 && <div className="text-zinc-400 p-4">No activity yet.</div>}
-            </div>
+            {tab === "settings" && <SettingsView />}
           </div>
         )}
-
-        {tab === "settings" && (
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="card p-6">
-              <div className="text-xl font-semibold">Infrastructure</div>
-              <div className="text-zinc-400 text-sm mt-1">Core system architecture</div>
-              <div className="sep my-5" />
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400">Database</span>
-                  <span className="font-mono text-zinc-200">Cloudflare D1 (SQLite)</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400">Backend</span>
-                  <span className="font-mono text-zinc-200">Worker (Vite/TS)</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400">API Endpoint</span>
-                  <span className="font-mono text-sky-400">api.gnn.tr</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400">Check Interval</span>
-                  <span className="font-mono text-zinc-200">Adaptive (min. 15m)</span>
-                </div>
-              </div>
-              
-              <div className="sep my-6" />
-              <div className="text-xl font-semibold">Operational Notes</div>
-              <ul className="text-sm text-zinc-300 space-y-3 mt-4 leading-relaxed">
-                <li className="flex gap-2">
-                  <span className="text-zinc-500">•</span>
-                  <span>Default checks are hourly. Adaptive backoff applies on rate limits (6h → 12h → 24h).</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-zinc-500">•</span>
-                  <span>Errors automatically trigger a 2h backoff to prevent system spam.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-zinc-500">•</span>
-                  <span>System is designed to stay within Cloudflare Always-Free tier limits.</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="card p-6 bg-grid">
-              <div className="text-xl font-semibold">System Utilities</div>
-              <div className="text-zinc-400 text-sm mt-1">Notifications & maintenance</div>
-              
-              <div className="sep my-5" />
-              <div className="text-sm font-medium text-zinc-300 mb-3 uppercase tracking-wider">Test Notification</div>
-              <button className="btn w-full py-3 bg-white/5 hover:bg-white/10 border-white/10" onClick={async () => {
-                try {
-                  await api.testNotify();
-                  toast.push("Test notification sent!");
-                } catch (e: any) {
-                  toast.push(e.message || "Failed to send");
-                }
-              }}>
-                🔔 Send Test Notification
-              </button>
-
-              <div className="sep my-8" />
-              <div className="text-sm font-medium text-rose-400 mb-3 uppercase tracking-wider">Database Maintenance</div>
-              
-              <div className="space-y-3">
-                <button className="btn w-full py-2.5 text-sm bg-white/5 hover:bg-white/10 border-white/5" onClick={async () => {
-                  try {
-                    const res = await api.cleanEvents();
-                    toast.push(`Cleaned ${res.removed} old events.`);
-                    await refreshAll();
-                  } catch (e: any) {
-                    toast.push(e.message);
-                  }
-                }}>
-                  🧹 Clean Events (&gt; 30 days)
-                </button>
-
-                <button className="btn w-full py-2.5 text-sm bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20 text-rose-300" onClick={() => {
-                  setResetInput("");
-                  setResetOpen(true);
-                }}>
-                  💀 Factory Reset System
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       </main>
 
-      <Modal open={addOpen} title="Add Domain" onClose={() => setAddOpen(false)}>
-        <div className="flex bg-black/20 p-1 rounded-lg mb-4">
-          <button 
-            onClick={() => setBulkMode(false)}
-            className={`flex-1 py-1.5 text-xs rounded-md transition ${!bulkMode ? 'bg-white/10 shadow-sm' : 'text-zinc-500'}`}
-          >
-            Single
-          </button>
-          <button 
-            onClick={() => setBulkMode(true)}
-            className={`flex-1 py-1.5 text-xs rounded-md transition ${bulkMode ? 'bg-white/10 shadow-sm' : 'text-zinc-500'}`}
-          >
-            Bulk
-          </button>
-        </div>
+      {/* Unified Global Footer */}
+      <Footer />
 
-        {bulkMode ? (
-          <form onSubmit={handleBulkAdd} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">Domains (one per line or comma separated)</label>
-              <textarea 
-                className="input min-h-[150px] resize-none" 
-                placeholder="google.com&#10;apple.com, example.net"
-                value={bulkInput}
-                onChange={e => setBulkInput(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">Interval</label>
-              <select
-                className="input bg-black/30 w-full"
-                value={newInterval}
-                onChange={e => setNewInterval(Number(e.target.value))}
-              >
-                {[30, 60, 120, 240, 360, 720, 1440].map(m => (
-                  <option key={m} value={m}>{m} min</option>
-                ))}
-              </select>
-              <div className="flex items-center gap-1.5 text-xs mt-1">
-                {newInterval === 30 && (
-                  <span className="text-amber-400 flex items-center gap-1">
-                    <span>●</span> High Load
-                  </span>
-                )}
-                {newInterval >= 60 && newInterval <= 360 && (
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <span>●</span> Optimal
-                  </span>
-                )}
-                {newInterval > 360 && (
-                  <span className="text-sky-400 flex items-center gap-1">
-                    <span>●</span> Eco
-                  </span>
-                )}
-              </div>
-            </div>
-            <button type="submit" className="btn w-full bg-white text-black hover:bg-zinc-200 border-none py-3">
-              Import All
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleAdd} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">Domain Name</label>
-              <input type="text" className="input" placeholder="example.com" value={newDomain} onChange={e => setNewDomain(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">Label (Optional)</label>
-              <input type="text" className="input" placeholder="Client X" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">Interval</label>
-              <select
-                className="input bg-black/30 w-full"
-                value={newInterval}
-                onChange={e => setNewInterval(Number(e.target.value))}
-              >
-                {[30, 60, 120, 240, 360, 720, 1440].map(m => (
-                  <option key={m} value={m}>{m} min</option>
-                ))}
-              </select>
-              <div className="flex items-center gap-1.5 text-xs mt-1">
-                {newInterval === 30 && (
-                  <span className="text-amber-400 flex items-center gap-1">
-                    <span>●</span> High Load
-                  </span>
-                )}
-                {newInterval >= 60 && newInterval <= 360 && (
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <span>●</span> Optimal
-                  </span>
-                )}
-                {newInterval > 360 && (
-                  <span className="text-sky-400 flex items-center gap-1">
-                    <span>●</span> Eco
-                  </span>
-                )}
-              </div>
-            </div>
-            <button type="submit" className="btn w-full bg-white text-black hover:bg-zinc-200 border-none py-3">
-              Start Monitoring
-            </button>
-          </form>
-        )}
-      </Modal>
+      {/* Add Domain Modal (Single & Bulk) */}
+      <AddDomainModal
+        open={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onAdd={handleAddDomain}
+        onBulkAdd={handleBulkAddDomains}
+      />
 
-      <Modal open={resetOpen} title="Dangerous Action: Factory Reset" onClose={() => setResetOpen(false)}>
-        <div className="space-y-4">
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-200 text-sm">
-            <strong>Warning:</strong> Deleting everything is permanent and cannot be undone. All domains and history will be lost.
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Type <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-200 select-all">yes-i-know-all-database-rows-deleted</code> to confirm:
-            </label>
-            <input 
-              type="text" 
-              className="input border-rose-500/30 focus:border-rose-500" 
-              placeholder="Type confirmation here..."
-              value={resetInput}
-              onChange={e => setResetInput(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button className="btn flex-1" onClick={() => setResetOpen(false)}>Cancel</button>
-            <button 
-              className="btn flex-1 bg-rose-600 hover:bg-rose-500 text-white border-none disabled:opacity-30 disabled:cursor-not-allowed font-bold"
-              disabled={resetInput !== "yes-i-know-all-database-rows-deleted"}
-              onClick={async () => {
-                try {
-                  await api.factoryReset();
-                  toast.push("System has been fully reset.");
-                  setResetOpen(false);
-                  window.location.reload();
-                } catch (e: any) {
-                  toast.push(e.message);
-                }
-              }}
-            >
-              Destroy Everything
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      <GlobalFooter />
+      {/* Constitution-Compliant Custom Delete Confirmation Modal */}
+      <DeleteDomainModal
+        domain={deleteModalDomain}
+        onClose={() => setDeleteModalDomain(null)}
+        onConfirm={handleDeleteDomain}
+      />
     </div>
   );
 }

@@ -15,29 +15,28 @@ This document defines the engineering standards, code conventions, and UI/UX pat
 
 ---
 
-## 🎨 UI/UX Design System Standards
+## 🎨 UI/UX Design System Standards (DomainPulse v2.0)
 
-### 1. Minimalist Status Indicators
-- **Rule**: Do not use pill-style badges for domain check statuses.
-- **Pattern**: Status indicators must use a text-only representation paired with a colored dot (`●`).
-  - Green dot for active/available.
-  - Yellow/red for rate-limited, expired, or pending delete.
+### 1. Telemetry Status & Indicators
+- Adopt the **DomainPulse** telemetry visual language:
+  - Electric Mint (`#00f5a0` / `primary-container`) for Available / Drop Ready domains with animated pulse indicators.
+  - Cyan / Cobalt (`#4cd7f6` / `secondary`) for active sweeps and optimal check states.
+  - Flame Orange / Amber (`#ff5722` / `tertiary`) for imminent drops (<2h) or rate-limited states.
+  - Badges and chips: Compact pills with uppercase letter-spaced font (`label-caps`) and 15% opacity tint backgrounds matching the accent color.
 
 ### 2. Centered Login Experience
-- The authentication screen must be minimalist, centered, and distraction-free.
+- The authentication screen must be minimalist, centered, technical, and distraction-free with subtle telemetry glow.
 
 ### 3. Dynamic Navigation
-- Header buttons (Dashboard, Activity, Settings) must only be rendered once the user has successfully authenticated.
+- Header buttons (Dashboard, Activity, Settings) and quick actions must only be rendered once the user has successfully authenticated.
 
 ### 4. Safety First Confirmation Modals
-- **Rule**: Never use native browser `confirm()` popups for destructive actions (e.g., Factory Reset, database purges).
-- **Pattern**: Implement a custom "Type to Confirm" modal requiring the user to type a specific passphrase (e.g. `FACTORY RESET`) to prevent accidental data loss.
+- **Rule**: Never use native browser `confirm()` popups for destructive actions (e.g., Domain removal, Factory Reset, database purges).
+- **Pattern**: Implement custom themed modals with explicit confirmations to prevent accidental data loss.
 
 ### 5. Unified Footer Layout
-- The global page footer must be consistent across both the unauthenticated Login state and the authenticated Dashboard/Settings views, with responsive positioning.
+- The global page footer must be consistent across both the unauthenticated Login state and the authenticated views, with responsive positioning.
 
-### 6. Utilities for Styling
-- Use the styling helper utilities (e.g. `lib/ui.ts` class generators) to ensure CSS/Tailwind classes are consolidated and unified.
 
 ---
 

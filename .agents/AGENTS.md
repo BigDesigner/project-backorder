@@ -6,5 +6,7 @@
 - **Verification Gates**: Every upgrade step must be validated locally via TypeScript compiler checks, builds, lint runs, and local dev server visual inspection before deployment.
 
 ## Dependency Management Rule
-- **Package Manager**: Use pnpm exclusively for all JavaScript/TypeScript subdirectories (worker/, rontend/). Do NOT use 
-pm or yarn as they lead to bloated local installations. The project has been optimized to use pnpm's global store.
+- **Package Manager**: Use pnpm exclusively for all JavaScript/TypeScript subdirectories (worker/, frontend/). Do NOT use npm or yarn as they lead to bloated local installations. The project has been optimized to use pnpm's global store.
+
+## Git Commit Anonymity Rule
+- **CRITICAL GIT PROHIBITION**: Never append, inject, or suggest any "Co-Authored-By" trailers, metadata, or attribution lines (e.g., "Co-Authored-By: Claude...") in git commit messages, code blocks, or automated git scripts. All git commit messages must remain completely anonymous or strictly limited to the user's explicit content.
