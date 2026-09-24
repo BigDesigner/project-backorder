@@ -323,7 +323,7 @@ export function DomainTable({
                               <select
                                 value={d.check_interval_min}
                                 onChange={(e) => onChangeInterval?.(d, parseInt(e.target.value, 10))}
-                                className="bg-transparent text-on-surface font-label-code text-[11px] outline-none cursor-pointer pr-1"
+                                className="bg-transparent text-on-surface font-label-code text-[11px] outline-none cursor-pointer"
                                 title="Click to change sweep cadence interval"
                               >
                                 {opts.map((opt) => (
@@ -332,9 +332,6 @@ export function DomainTable({
                                   </option>
                                 ))}
                               </select>
-                              <span className="material-symbols-outlined text-[14px] text-on-surface-variant pointer-events-none select-none shrink-0">
-                                expand_more
-                              </span>
                             </div>
                             <span className={`block text-[10px] font-label-caps ${cadence.color}`}>
                               {cadence.meta}
