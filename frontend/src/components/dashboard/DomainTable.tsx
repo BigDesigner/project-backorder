@@ -173,8 +173,8 @@ export function DomainTable({
         {/* Search & Filter Toolbar */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Search Input */}
-          <div className="relative min-w-[220px] flex-1 sm:flex-initial">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">
+          <div className="relative min-w-[240px] flex-1 sm:flex-initial">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px] pointer-events-none select-none">
               search
             </span>
             <input
@@ -182,7 +182,7 @@ export function DomainTable({
               placeholder="Search domains or labels..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/50 text-xs pl-9 pr-3 py-2 rounded-lg border border-outline-variant/60 focus:outline-none focus:border-secondary transition-colors"
+              className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/50 text-xs pl-10 pr-3 py-2 rounded-lg border border-outline-variant/60 focus:outline-none focus:border-secondary transition-colors"
             />
           </div>
 
@@ -314,11 +314,16 @@ export function DomainTable({
 
                         return (
                           <div className="flex flex-col gap-1">
-                            <div className="relative inline-flex items-center w-fit">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/60 focus-within:border-secondary transition-all w-fit">
+                              <span
+                                className={`material-symbols-outlined text-[15px] shrink-0 select-none ${cadence.color}`}
+                              >
+                                speed
+                              </span>
                               <select
                                 value={d.check_interval_min}
                                 onChange={(e) => onChangeInterval?.(d, parseInt(e.target.value, 10))}
-                                className="appearance-none bg-surface-container hover:bg-surface-container-high text-on-surface font-label-code text-[11px] pl-6 pr-6 py-1 rounded border border-outline-variant/60 focus:outline-none focus:border-secondary cursor-pointer transition-colors"
+                                className="bg-transparent text-on-surface font-label-code text-[11px] outline-none cursor-pointer pr-1"
                                 title="Click to change sweep cadence interval"
                               >
                                 {opts.map((opt) => (
@@ -327,14 +332,11 @@ export function DomainTable({
                                   </option>
                                 ))}
                               </select>
-                              <span className={`material-symbols-outlined text-[13px] absolute left-1.5 pointer-events-none ${cadence.color}`}>
-                                speed
-                              </span>
-                              <span className="material-symbols-outlined text-[13px] absolute right-1 text-on-surface-variant pointer-events-none">
+                              <span className="material-symbols-outlined text-[14px] text-on-surface-variant pointer-events-none select-none shrink-0">
                                 expand_more
                               </span>
                             </div>
-                            <span className="block text-[10px] text-on-surface-variant font-label-caps">
+                            <span className={`block text-[10px] font-label-caps ${cadence.color}`}>
                               {cadence.meta}
                             </span>
                           </div>

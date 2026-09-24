@@ -179,8 +179,8 @@ export function ActivityView({ events }: ActivityViewProps) {
 
         <div className="flex items-center gap-3">
           {/* Search */}
-          <div className="relative">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]">
+          <div className="relative min-w-[240px] flex-1 sm:flex-initial">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px] pointer-events-none select-none">
               search
             </span>
             <input
@@ -188,7 +188,7 @@ export function ActivityView({ events }: ActivityViewProps) {
               placeholder="Search logs or IPs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/50 text-xs pl-8 pr-3 py-1.5 rounded-lg border border-outline-variant/60 focus:outline-none focus:border-secondary transition-colors"
+              className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/50 text-xs pl-10 pr-3 py-2 rounded-lg border border-outline-variant/60 focus:outline-none focus:border-secondary transition-colors"
             />
           </div>
 
