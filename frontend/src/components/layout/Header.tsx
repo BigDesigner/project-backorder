@@ -18,9 +18,6 @@ export function Header({ tab, setTab, onAddClick, onLogout, authed, userEmail }:
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setTab("dashboard")}>
             <div className="w-2.5 h-2.5 rounded-full bg-primary-container shadow-[0_0_8px_#00f5a0]" />
             <span className="font-semibold text-xl tracking-tight text-on-surface">DomainPulse</span>
-            <span className="font-label-caps px-1.5 py-0.5 rounded bg-surface-container-high text-primary-container border border-outline-variant text-[10px]">
-              v2.0
-            </span>
           </div>
 
           {/* Navigation Links */}

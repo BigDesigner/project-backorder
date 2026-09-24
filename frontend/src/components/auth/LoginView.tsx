@@ -36,8 +36,8 @@ export function LoginView({ onLogin, loading }: LoginViewProps) {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-on-surface">DomainPulse</h1>
-              <p className="text-xs text-on-surface-variant font-label-code mt-0.5">
-                TELEMETRY ACCESS GATEWAY • SEC-07 VERIFIED
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Sign in to access your monitor
               </p>
             </div>
           </div>
@@ -99,11 +99,6 @@ export function LoginView({ onLogin, loading }: LoginViewProps) {
               )}
             </button>
           </form>
-
-          <div className="flex items-center justify-center gap-2 pt-2 text-[11px] text-on-surface-variant font-label-code border-t border-outline-variant/50">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary-container" />
-            <span>Encrypted PBKDF2-SHA256 • IP Rate Limiting Active</span>
-          </div>
         </div>
       </div>
     </div>
