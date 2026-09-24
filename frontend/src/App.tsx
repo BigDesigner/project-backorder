@@ -151,6 +151,16 @@ function Shell() {
     }
   }
 
+  async function handleChangeInterval(d: Domain, intervalMin: number) {
+    try {
+      await api.patchDomain(d.id, { intervalMin });
+      toast.push(`Sweep cadence for ${d.domain} updated to ${intervalMin}m.`);
+      await refreshAll();
+    } catch (e: any) {
+      toast.push(e?.message || "Failed to update interval.");
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -206,6 +216,7 @@ function Shell() {
                   onToggle={handleToggleDomain}
                   onForceCheck={handleForceCheck}
                   onDelete={(d) => setDeleteModalDomain(d)}
+                  onChangeInterval={handleChangeInterval}
                   onAddClick={() => setAddModalOpen(true)}
                 />
               </>

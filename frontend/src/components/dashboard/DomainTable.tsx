@@ -11,6 +11,7 @@ interface DomainTableProps {
   onToggle: (d: Domain) => void;
   onForceCheck: (d: Domain) => void;
   onDelete: (d: Domain) => void;
+  onChangeInterval?: (d: Domain, intervalMin: number) => void;
   onAddClick: () => void;
 }
 
@@ -24,6 +25,7 @@ export function DomainTable({
   onToggle,
   onForceCheck,
   onDelete,
+  onChangeInterval,
   onAddClick,
 }: DomainTableProps) {
   // Filter domains based on search query and status filter
@@ -56,6 +58,19 @@ export function DomainTable({
     () => domains.filter((d) => (d.last_status || "").toLowerCase() === "registered").length,
     [domains]
   );
+
+  function formatIntervalLabel(m: number): string {
+    if (m === 30) return "30 min";
+    if (m === 60) return "60 min";
+    if (m === 120) return "2 hours";
+    if (m === 240) return "4 hours";
+    if (m === 360) return "6 hours";
+    if (m === 720) return "12 hours";
+    if (m === 1440) return "24 hours";
+    if (m < 60) return `${m} min`;
+    const h = m / 60;
+    return Number.isInteger(h) ? `${h} hours` : `${m} min`;
+  }
 
   function getCadenceBadge(min: number) {
     if (min <= 30) {
@@ -291,13 +306,40 @@ export function DomainTable({
 
                     {/* Cadence / Interval */}
                     <td className="py-4 px-4">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container font-label-code text-[11px] text-on-surface border border-outline-variant/40">
-                        <span className={`material-symbols-outlined text-[14px] ${cadence.color}`}>speed</span>
-                        <span>{cadence.label}</span>
-                      </span>
-                      <span className="block text-[10px] text-on-surface-variant font-label-caps mt-0.5">
-                        {cadence.meta}
-                      </span>
+                      {(() => {
+                        const INTERVAL_OPTIONS = [30, 60, 120, 240, 360, 720, 1440];
+                        const opts = INTERVAL_OPTIONS.includes(d.check_interval_min)
+                          ? INTERVAL_OPTIONS
+                          : [...INTERVAL_OPTIONS, d.check_interval_min].sort((a, b) => a - b);
+
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <div className="relative inline-flex items-center w-fit">
+                              <select
+                                value={d.check_interval_min}
+                                onChange={(e) => onChangeInterval?.(d, parseInt(e.target.value, 10))}
+                                className="appearance-none bg-surface-container hover:bg-surface-container-high text-on-surface font-label-code text-[11px] pl-6 pr-6 py-1 rounded border border-outline-variant/60 focus:outline-none focus:border-secondary cursor-pointer transition-colors"
+                                title="Click to change sweep cadence interval"
+                              >
+                                {opts.map((opt) => (
+                                  <option key={opt} value={opt} className="bg-surface-container-lowest text-on-surface">
+                                    {formatIntervalLabel(opt)}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className={`material-symbols-outlined text-[13px] absolute left-1.5 pointer-events-none ${cadence.color}`}>
+                                speed
+                              </span>
+                              <span className="material-symbols-outlined text-[13px] absolute right-1 text-on-surface-variant pointer-events-none">
+                                expand_more
+                              </span>
+                            </div>
+                            <span className="block text-[10px] text-on-surface-variant font-label-caps">
+                              {cadence.meta}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Expiry Date */}
