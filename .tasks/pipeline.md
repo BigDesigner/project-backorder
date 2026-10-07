@@ -29,6 +29,13 @@ The repository has been successfully migrated to the **Project Memory Bank** str
 - [x] Support WHOIS fallback when RDAP is missing/fails for specific TLDs. (Implemented backend query over TCP using cloudflare:sockets, including dynamic TLD parser and expiry date scanner).
 - [ ] Implement multi-user support (low priority).
 
+### 3. RDAP Rate Limit Resilience & Adaptive Backoff Hardening (Gelecek Aşama)
+*Kök Neden & Bağlam:* Cloudflare Worker ortak çıkış IP havuzu (AS13335) üzerinden Google Registry (`pubapi.registry.google`) gibi otoriter servislere yapılan isteklerin geçici HTTP 429 alması ve mevcut scheduler koruma algoritmasının aşırı agresif gecikmeyle (6h/12h/24h) domaini 24 saat kilitli tutması.
+- [ ] **Akılcı Backoff Kademeleri (`worker/src/scheduler.ts`)**: 429 hataları için mevcut 6h -> 12h -> 24h gecikme basamaklarını 15m -> 30m -> 1h (maks 2h) seviyesine revize etmek.
+- [ ] **Force Sweep Sıfırlaması (`worker/src/index.ts`)**: Kullanıcı arayüzden "Sweep Now" (manuel kontrol) tetiklediğinde `consecutive_errors = 0` ve `last_error = NULL` yaparak temiz bir retry ortamı sağlamak.
+- [ ] **Akıllı Retry ve Failover (`worker/src/rdap.ts`)**: 429 yanıtı alındığında 1-2 saniye smart jitter ile anlık tek seferlik yeniden deneme ve gerekirse `rdap.org` bootstrap servisine anlık failover yönlendirmesi yapmak.
+- [ ] **WHOIS-Olmayan gTLD Telemetri Netliği**: Port 43 WHOIS servisi bulunmayan gTLD'lerde (.dev, .app vb.) olası geçici limitlerde telemetri durumunu arayüzde kullanıcıya daha şeffaf yansıtmak.
+
 
 ---
 

@@ -25,6 +25,16 @@ This document lists tracked bug reports, runtime environment caveats, and D1 dat
 * **Description**: Standard RDAP redirection (e.g. via RIPE) frequently fails or returns 530/1016 error codes for Turkish `.tr` (Trabis) domains.
 * **Suggested Action/Mitigation**: Explicitly bypass standard RDAP registry redirects and route `.tr` queries directly to `rdap.iana.org`.
 
+### 4. Cloudflare Worker IP (AS13335) Rate Limiting & Aggressive 24h Scheduler Backoff
+* **Type**: Third-party IP Quota & Scheduler Logic Caveat
+* **Confidence**: Verified (Live D1 telemetry logs for domain `gnn.dev`)
+* **Status**: Open / Planned for Hardening
+* **Description**: Cloudflare Workers egress IPs (shared datacenter pool) can receive transient HTTP 429 rate limit responses from authoritative RDAP providers (e.g., Google Registry for `.dev`). When a 429 occurs, `scheduler.ts` executes an exponential backoff that scales to 24 hours. Because the domain's `last_status` remains frozen as `rate_limited` until `next_check_at` (24h later), it creates a perception in the dashboard that an infrequent check frequency (e.g. 24h cadence) caused the rate limit.
+* **Suggested Action/Mitigation**:
+  1. Reduce scheduler 429 backoff delays from 6h/12h/24h down to 15m/30m/1h (max 2h).
+  2. In `index.ts`, reset `consecutive_errors = 0` and clear `last_error` when `forceCheck: true` is triggered.
+  3. In `rdap.ts`, implement quick jittered retry and failover to `rdap.org` when a primary RDAP endpoint returns 429.
+
 ## Active Bug Reports / Test Failures
 
 ### 1. Missing ESLint Configuration in Worker Directory (Resolved)
