@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - miniflare@5.20261006.0-alpha
+  - wrangler@4.148.0
+overrides:
+  sharp: ">=0.35.5"
+
