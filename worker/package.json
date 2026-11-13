@@ -11,7 +11,7 @@
     "migrate:remote": "wrangler d1 migrations apply backorder_d1"
   },
   "dependencies": {
-    "hono": "^4.13.13"
+    "hono": "^4.13.16"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261005.1",
